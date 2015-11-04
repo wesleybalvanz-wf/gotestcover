@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -32,6 +33,7 @@ var (
 	flagCoverProfile string
 
 	// custom
+	flagGodep            bool
 	flagParallelPackages = runtime.GOMAXPROCS(0)
 )
 
@@ -82,6 +84,7 @@ func parseFlags() error {
 	flag.StringVar(&flagCoverProfile, "coverprofile", flagCoverProfile, "see 'go test' help")
 
 	flag.IntVar(&flagParallelPackages, "parallelpackages", flagParallelPackages, "Number of package test run in parallel")
+	flag.BoolVar(&flagGodep, "godep", flagGodep, "Run tests with godep")
 
 	flag.Parse()
 	if flagCoverProfile == "" {
@@ -204,9 +207,19 @@ func runPackageTests(pkg string) (out string, cov []byte, err error) {
 	args = append(args, "-coverprofile", coverFile.Name())
 
 	args = append(args, pkg)
-	cmdOut, err := runGoCommand(args...)
-	if err != nil {
-		return "", nil, err
+	cmdOut := []byte{}
+
+	if flagGodep {
+		args = append([]string{"go"}, args...)
+		cmdOut, err = runGodepCommand(args...)
+		if err != nil {
+			return "", nil, err
+		}
+	} else {
+		cmdOut, err = runGoCommand(args...)
+		if err != nil {
+			return "", nil, err
+		}
 	}
 	cov, err = ioutil.ReadAll(coverFile)
 	if err != nil {
@@ -236,6 +249,15 @@ func writeCoverProfile(cov []byte) error {
 
 func runGoCommand(args ...string) ([]byte, error) {
 	cmd := exec.Command("go", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("command %s: %s\n%s", cmd.Args, err, out)
+	}
+	return out, nil
+}
+
+func runGodepCommand(args ...string) ([]byte, error) {
+	cmd := exec.Command("godep", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("command %s: %s\n%s", cmd.Args, err, out)
